@@ -39,6 +39,7 @@ The program will generate audio files for each line, for each voice, and for eac
 ## Configuration
 
 The `settings.ini` file is used to configure the program. It includes the following settings:
+- 'lines_file': the CSV file to pull the lines from.
 - `directory_name`: Name of the directory to place the voice files. Change this when you change voice script, as the system will not duplicate files in a directory (to make it easier to restart. 
 - `casting_note`: A description of the desired voice.
 - `specified_voice_names`: A list of specific voice names to include in the voice selection. Use lower case. Separate multiple names with commas.
