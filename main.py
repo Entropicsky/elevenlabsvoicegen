@@ -39,9 +39,11 @@ load_dotenv()  # take environment variables from .env.
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 CHATGPT_API_KEY = os.getenv('CHATGPT_API_KEY')
 
-
+# Load the voice lines from the CSV file
 df = pd.read_csv('lines.csv')
-lines = list(df.itertuples(index=False, name=None))
+#lines = list(df.itertuples(index=False, name=None))
+lines = list(df[['id', 'text']].itertuples(index=False, name=None))
+
 
 
 # Get the current time at the start of the program
@@ -202,10 +204,13 @@ for i, voice in enumerate(final_voices):
   print(f"{i+1}. Name: {voice['name']}, Gender: {voice['labels'].get('gender', 'N/A')}, Accent: {voice['labels'].get('accent', 'N/A')}, Voice ID: {voice['voice_id']}, Preview URL: {voice['preview_url']}, Description: {voice['labels'].get('description', 'N/A')}, Use Case: {voice['labels'].get('use case', 'N/A')}")
 
 # Define your directory name
-dir_name = f"voicefiles_{start_time_str}"
+#dir_name = f"voicefiles_{start_time_str}"
+dir_name = config.get('System', 'directory_name')
+
 
 # Ensure the directory exists
 os.makedirs(dir_name, exist_ok=True)
+
 
 for voice_info in final_voices:
     voice_name = voice_info['name']
@@ -213,13 +218,16 @@ for voice_info in final_voices:
     for line in lines:
         line_id, line_text = line
         for variant, (stability, similarity_boost) in enumerate(settings_combinations):
+            filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant+1}_stability_{stability}_similarity_{similarity_boost}.wav"
+            # Check if file exists
+            if os.path.exists(filename):
+                print(f"File {filename} already exists, skipping...")
+                continue
             try:
                 print(f"Generating line: {line_text} with stability: {stability} and similarity boost: {similarity_boost}")  # Log the line being processed
                 # Generate the audio
                 audio = generate_audio(text=line_text, voice_id=voice_id, stability=stability, similarity_boost=similarity_boost)
-
                 # Save the audio file
-                filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant+1}_stability_{stability}_similarity_{similarity_boost}.wav"
                 with open(filename, 'wb') as f:
                     f.write(audio)
             except Exception as e:
