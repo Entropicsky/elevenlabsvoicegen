@@ -39,9 +39,10 @@ load_dotenv()  # take environment variables from .env.
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 CHATGPT_API_KEY = os.getenv('CHATGPT_API_KEY')
 
+
 # Load the voice lines from the CSV file
-df = pd.read_csv('lines.csv')
-#lines = list(df.itertuples(index=False, name=None))
+lines_file = config.get('Settings', 'lines_file')
+df = pd.read_csv(lines_file)
 lines = list(df[['id', 'text']].itertuples(index=False, name=None))
 
 
@@ -145,7 +146,7 @@ def pick_best_voices(voices, casting_note, num_suggestions):
     # Get the ordered list of voice names from the model's output
     voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)\s\(", response_message)]  # updated regular expression
 
-     # filter original voices list to get top voices with all information
+    # filter original voices list to get top voices with all information
     top_voices = [voice for voice in voices if voice['name'].lower() in voice_names_in_response][:num_suggestions]
 
 
@@ -192,11 +193,13 @@ for voice in specified_voices:
 remaining_voices = [voice for voice in all_voices if voice not in specified_voices]
 
 # Then, get suggestions from ChatGPT for the remaining voices
-top_voices = pick_best_voices(remaining_voices, casting_note, num_suggestions=ACTORS + len(specified_voice_names))
-
+top_voices = []
+if ACTORS > 0:
+    top_voices = pick_best_voices(remaining_voices, casting_note, num_suggestions=ACTORS)
 
 # Combine manually specified voices and top voices
 final_voices = specified_voices + top_voices
+
 
 
 print("Final voice picks:")
