@@ -188,7 +188,7 @@ def get_elevenlabs_voices():
 # Updated function to include gender and accent
 
 
-def pick_best_voices(voices, casting_note, num_suggestions):
+def pick_best_voices_elevenlabs(voices, casting_note, num_suggestions):
     openai.api_key = CHATGPT_API_KEY
 
     # transform voice data into a string format
@@ -396,7 +396,7 @@ if use_elevenlabs:
     # Get ChatGPT to choose the Top X best voices based on casting notes for ElevenLabs. X determined by the _actors variables in settings.ini
     top_voices_elevenlabs = []
     if elevenlabs_actors > 0:
-        top_voices_elevenlabs = pick_best_voices(remaining_voices_elevenlabs, casting_note, num_suggestions=elevenlabs_actors)
+        top_voices_elevenlabs = pick_best_voices_elevenlabs(remaining_voices_elevenlabs, casting_note, num_suggestions=elevenlabs_actors)
 
     # Combine manually specified voices and top voices for ElevenLabs
     final_voices_elevenlabs = specified_voices_elevenlabs + top_voices_elevenlabs
