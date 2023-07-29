@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 import openai
 import json
+import time
 import re
 import os
 from dotenv import load_dotenv
@@ -9,8 +10,13 @@ import datetime
 import csv
 import itertools
 import configparser
+import wave
 import elevenlabs
 from elevenlabs import generate, save
+import urllib.request
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 
 # read the settings.ini file to get key configuration
 config = configparser.ConfigParser()
@@ -19,9 +25,6 @@ config.read('settings.ini')
 # use a casting note to help select voices to use
 casting_note = config.get('Voice', 'casting_note')
 
-# Specify any voices that you know you want to use, if any. USE LOWER CASE.
-specified_voice_names = [name.strip() for name in config.get('Voice', 'specified_voices').split(",")]
-
 # Define your ranges here
 stability_range = [float(value.strip()) for value in config.get('Settings', 'stability_range').split(",")]
 similarity_boost_range = [float(value.strip()) for value in config.get('Settings', 'similarity_boost_range').split(",")]
@@ -29,7 +32,9 @@ similarity_boost_range = [float(value.strip()) for value in config.get('Settings
 settings_combinations = list(itertools.product(stability_range, similarity_boost_range))
 
 VARIANTS = config.getint('Settings', 'variants')  # Number of variants per actor per line
-ACTORS = config.getint('Settings', 'actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
+#ACTORS = config.getint('Settings', 'actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
+elevenlabs_actors = config.getint('Settings', 'elevenlabs_actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
+playht_actors = config.getint('Settings', 'playht_actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
 
 CHUNK_SIZE = config.getint('System', 'chunk_size')
 
@@ -38,6 +43,14 @@ load_dotenv()  # take environment variables from .env.
 
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 CHATGPT_API_KEY = os.getenv('CHATGPT_API_KEY')
+
+# Play.ht settings
+PLAYHT_API_KEY = os.getenv('PLAYHT_API_KEY')
+PLAYHT_USER_ID = os.getenv('PLAYHT_USER_ID')  # Get the user ID from the environment
+PLAYHT_URL_GET_VOICES = config.get('PlayHT', 'url_get_voices')
+PLAYHT_URL_CONVERT = config.get('PlayHT', 'url_convert')
+PLAYHT_URL_STATUS = config.get('PlayHT', 'url_status')
+
 
 
 # Load the voice lines from the CSV file
@@ -66,6 +79,81 @@ elevenlabs.set_api_key(ELEVENLABS_API_KEY)
 
 CHATGPT_MODEL = 'gpt-3.5-turbo-16k'
 CHATGPT_URL = 'https://api.openai.com/v1/chat/completions'
+
+
+
+def get_playht_voices():
+    headers = {
+        "Accept": "application/json",
+        "Authorization": PLAYHT_API_KEY,
+        "X-User-Id": PLAYHT_USER_ID
+    }
+    response = requests.get(PLAYHT_URL_GET_VOICES, headers=headers)
+    
+    # Print the entire response
+    #print("Response: ", response.__dict__)
+    
+    # Check the status code of the response
+    if response.status_code == 403:
+        print("The provided API key's plan does not have access to the requested resource.")
+        return []
+    
+    voices = response.json()["voices"]
+
+    
+    # Filter out non-English voices
+    english_voices = [voice for voice in voices if 'English' in voice['language']]
+    
+    print(f"Fetched {len(english_voices)} English voices from Play.ht")
+    return english_voices
+
+
+
+def generate_audio_playht(text, voice):
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": PLAYHT_API_KEY,
+        "X-User-Id": PLAYHT_USER_ID
+    }
+    data = {
+        "content": [text],
+        "voice": voice
+    }
+    response = requests.post(PLAYHT_URL_CONVERT, headers=headers, json=data)
+    
+    response_data = response.json()
+    
+    # Print the response
+    print(f"Response from generate_audio_playht: {response_data}")
+    
+    if "error" in response_data:
+        print(f"Error: {response_data['error']} for voice {voice}. Skipping this voice.")
+        return None
+    
+    return response_data["transcriptionId"]
+
+
+
+def get_playht_audio_status(transcription_id):
+    headers = {
+        "Accept": "application/json",
+        "Authorization": PLAYHT_API_KEY,
+        "X-User-Id": PLAYHT_USER_ID
+    }
+    params = {
+        "transcriptionId": transcription_id
+    }
+    response = requests.get(PLAYHT_URL_STATUS, headers=headers, params=params)
+    response_data = response.json()
+    
+    # Print the status code and response data for debugging
+    print(f"Status code: {response.status_code}")
+    print(f"Response data: {response_data}")
+    
+    return response_data
+
+
 
 
 
@@ -153,6 +241,41 @@ def pick_best_voices(voices, casting_note, num_suggestions):
     return top_voices
 
 
+def pick_best_voices_playht(voices, casting_note, num_suggestions):
+    openai.api_key = CHATGPT_API_KEY
+
+    # transform voice data into a string format
+    voices_string = ', '.join([f"{voice['name']} (gender: {voice['gender']}, language: {voice['language']})" for voice in voices])
+
+    # prepare the message
+    user_message = {
+        "role": "user",
+        "content": f"We need a {casting_note}. Please rank the following voice options: {voices_string}. Return the top {num_suggestions} choice(s) for the best actors to handle the role in a numbered list."
+    }
+    system_message = {
+        "role": "system",
+        "content": "You are a casting director assistant that helps in selecting the best voice actors for a given role based on provided voice options and casting notes."
+    }
+    messages = [system_message, user_message]
+    
+    # call the model
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        messages=messages
+    )
+    
+    # extract the message from the response
+    response_message = response['choices'][0]['message']['content']
+
+    print(response_message)
+
+    # Get the ordered list of voice names from the model's output
+    voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)\s\(", response_message)]  # updated regular expression
+
+    # filter original voices list to get top voices with all information, preserving the order of ranking
+    top_voices = [next(voice for voice in voices if voice['name'].lower() == name) for name in voice_names_in_response][:num_suggestions]
+
+    return top_voices
 
 
 def add_specified_voices(voices, specified_voice_names, all_voices):
@@ -169,69 +292,165 @@ def add_specified_voices(voices, specified_voice_names, all_voices):
     return voices
 
 
+def download_and_save_file(url, filename):
+    # Download the file
+    response = requests.get(url)
+    
+    # Check the file format from the URL
+    base_url = url.split('?')[0]  # Split the URL at the first '?'
+    file_format = base_url.split('.')[-1]  # Get the file extension from the base URL
 
-
-# Example usage:
-# Example usage:
-
-
-all_voices = get_elevenlabs_voices()
-
-print("All voices:")
-for voice in all_voices:
-    print(voice['name'])
-
-# First, add specified voices
-specified_voices = add_specified_voices([], specified_voice_names, all_voices)
-
-print("Specified voices:")
-for voice in specified_voices:
-    print(voice['name'])
-
-
-# Remaining voices are those not manually specified
-remaining_voices = [voice for voice in all_voices if voice not in specified_voices]
-
-# Then, get suggestions from ChatGPT for the remaining voices
-top_voices = []
-if ACTORS > 0:
-    top_voices = pick_best_voices(remaining_voices, casting_note, num_suggestions=ACTORS)
-
-# Combine manually specified voices and top voices
-final_voices = specified_voices + top_voices
+    if file_format == 'mp3':
+        filename = filename.replace('.wav', '.mp3')  # Change the filename to .mp3
+    elif file_format != 'wav':
+        raise ValueError(f"Unsupported file format: {file_format}")
+    
+    with open(filename, 'wb') as f:
+        f.write(response.content)
 
 
 
-print("Final voice picks:")
-for i, voice in enumerate(final_voices):
-  print(f"{i+1}. Name: {voice['name']}, Gender: {voice['labels'].get('gender', 'N/A')}, Accent: {voice['labels'].get('accent', 'N/A')}, Voice ID: {voice['voice_id']}, Preview URL: {voice['preview_url']}, Description: {voice['labels'].get('description', 'N/A')}, Use Case: {voice['labels'].get('use case', 'N/A')}")
+
+
+
+#Use or don't use the APIs based on Settings    
+use_elevenlabs = config.getboolean('Voice', 'use_elevenlabs')
+use_playht = config.getboolean('Voice', 'use_playht')
+
+# Fetch voices from both APIs
+all_voices_elevenlabs = []
+all_voices_playht = []
+
+if use_elevenlabs:
+    all_voices_elevenlabs = get_elevenlabs_voices()
+
+if use_playht:
+    all_voices_playht = get_playht_voices()
+
+# Specify any voices that you know you want to use, if any. USE LOWER CASE.
+specified_voice_names_elevenlabs = [name.strip() for name in config.get('Voice', 'specified_voices_elevenlabs').split(",")]
+specified_voice_names_playht = [name.strip() for name in config.get('Voice', 'specified_voices_playht').split(",")]
+
+# Add specified voices for ElevenLabs and Play.ht
+specified_voices_elevenlabs = []
+specified_voices_playht = []
+
+if use_elevenlabs:
+    specified_voices_elevenlabs = add_specified_voices([], specified_voice_names_elevenlabs, all_voices_elevenlabs)
+
+if use_playht:
+    specified_voices_playht = add_specified_voices([], specified_voice_names_playht, all_voices_playht)
+
+# Fetch remaining voices
+remaining_voices_elevenlabs = [voice for voice in all_voices_elevenlabs if voice not in specified_voices_elevenlabs]
+remaining_voices_playht = [voice for voice in all_voices_playht if voice not in specified_voices_playht]
+
+# Get suggestions from ChatGPT for ElevenLabs and Play.ht
+top_voices_elevenlabs = []
+top_voices_playht = []
+
+if elevenlabs_actors > 0:
+    if use_elevenlabs:
+        top_voices_elevenlabs = pick_best_voices(remaining_voices_elevenlabs, casting_note, num_suggestions=elevenlabs_actors)
+
+if playht_actors > 0:
+    if use_playht:
+        top_voices_playht = pick_best_voices_playht(remaining_voices_playht, casting_note, num_suggestions=playht_actors)
+
+# Combine manually specified voices and top voices for ElevenLabs and Play.ht
+final_voices_elevenlabs = specified_voices_elevenlabs + top_voices_elevenlabs
+final_voices_playht = specified_voices_playht + top_voices_playht
+
+# Print final voice picks
+if use_elevenlabs:
+    print("Final voice picks for ElevenLabs:")
+    for i, voice in enumerate(final_voices_elevenlabs):
+        print(f"{i+1}. Name: {voice['name']}, Gender: {voice['labels'].get('gender', 'N/A')}, Accent: {voice['labels'].get('accent', 'N/A')}, Voice ID: {voice['voice_id']}, Preview URL: {voice['preview_url']}, Description: {voice['labels'].get('description', 'N/A')}, Use Case: {voice['labels'].get('use case', 'N/A')}")
+
+if use_playht:
+    print("Final voice picks for Play.ht:")
+    for i, voice in enumerate(final_voices_playht):
+        print(f"{i+1}. Name: {voice['name']}, Gender: {voice['gender']}, Language: {voice['language']}")
 
 # Define your directory name
-#dir_name = f"voicefiles_{start_time_str}"
 dir_name = config.get('System', 'directory_name')
-
 
 # Ensure the directory exists
 os.makedirs(dir_name, exist_ok=True)
 
+if use_elevenlabs:
+    # Generate voices for ElevenLabs
+    for voice_info in final_voices_elevenlabs:
+        voice_name = voice_info['name']
+        voice_id = voice_info['voice_id']
+        for line in lines:
+            line_id, line_text = line
+            for variant, (stability, similarity_boost) in enumerate(settings_combinations):
+                filename = f"{dir_name}/el_{voice_name}_{line_id}_variant_{variant+1}_stability_{stability}_similarity_{similarity_boost}.wav"
+                # Check if file exists
+                if os.path.exists(filename):
+                    print(f"File {filename} already exists, skipping...")
+                    continue
+                try:
+                    print(f"Generating line: {line_text} with stability: {stability} and similarity boost: {similarity_boost}")  # Log the line being processed
+                    # Generate the audio
+                    audio = generate_audio(text=line_text, voice_id=voice_id, stability=stability, similarity_boost=similarity_boost)
+                    # Save the audio file
+                    with open(filename, 'wb') as f:
+                        f.write(audio)
+                except Exception as e:
+                    print(f"Failed to generate audio for line: {line_text}. Error: {str(e)}")
 
-for voice_info in final_voices:
-    voice_name = voice_info['name']
-    voice_id = voice_info['voice_id']
+
+MAX_ATTEMPTS = 10  # Maximum number of attempts to check if audio is ready
+
+if use_playht:
+    # Generate voice lines for the selected Play.ht voices
+   for voice_info in final_voices_playht:
+    voice_name = voice_info["name"]
     for line in lines:
         line_id, line_text = line
-        for variant, (stability, similarity_boost) in enumerate(settings_combinations):
-            filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant+1}_stability_{stability}_similarity_{similarity_boost}.wav"
-            # Check if file exists
-            if os.path.exists(filename):
-                print(f"File {filename} already exists, skipping...")
-                continue
-            try:
-                print(f"Generating line: {line_text} with stability: {stability} and similarity boost: {similarity_boost}")  # Log the line being processed
-                # Generate the audio
-                audio = generate_audio(text=line_text, voice_id=voice_id, stability=stability, similarity_boost=similarity_boost)
-                # Save the audio file
-                with open(filename, 'wb') as f:
-                    f.write(audio)
-            except Exception as e:
-                print(f"Failed to generate audio for line: {line_text}. Error: {str(e)}")
+        filename = f"{dir_name}/playht_{voice_name}_{line_id}.mp3"
+        # Check if file exists
+        if os.path.exists(filename):
+            print(f"File {filename} already exists, skipping...")
+            continue
+        transcription_id = generate_audio_playht(text=line_text, voice=voice_name)
+        if transcription_id is None:
+            print(f"Skipping voice {voice_name} for line {line_id} due to error in audio generation.")
+            continue
+        attempt = 0
+        while True:
+            attempt += 1
+            audio_status = get_playht_audio_status(transcription_id)
+            print(f"Attempt #{attempt}: Audio status for voice {voice_name}, line {line_id}: {audio_status}")  # print the audio status for debugging
+            audio_ready = False
+            if 'converted' in audio_status:
+                audio_ready = audio_status["converted"]
+            elif 'transcriped' in audio_status:
+                audio_ready = audio_status["transcriped"]
+            if audio_ready and 'audioUrl' in audio_status:
+                audio_urls = audio_status["audioUrl"]
+                if isinstance(audio_urls, str):
+                    # Play.ht API gives a string
+                    audio_urls = [audio_urls]
+                download_successful = False
+                for audio_url in audio_urls:
+                    try:
+                        # Try to download the file
+                        download_and_save_file(audio_url, filename)
+                        print(f'Saved audio file for voice {voice_name} line {line_id} at {filename}')
+                        download_successful = True
+                        break  # exit the 'for' loop once the audio has been saved
+                    except Exception as e:
+                        print(f'Error while downloading file: {e}')
+                if download_successful:
+                    break  # exit the 'while' loop if a download was successful
+                else:
+                    print(f'Waiting for audio to be ready for voice {voice_name} line {line_id}...')
+            else:
+                print(f'Waiting for audio to be ready for voice {voice_name} line {line_id}...')
+            if attempt >= MAX_ATTEMPTS:
+                print(f'Stopped waiting for voice {voice_name} line {line_id} after {MAX_ATTEMPTS} attempts.')
+                break
+            time.sleep(5)
