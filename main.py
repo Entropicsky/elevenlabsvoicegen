@@ -387,7 +387,7 @@ if use_elevenlabs:
     # Specify any voices that you know you want to use for ElevenLabs, if any. USE LOWER CASE. This is pulled from settings.ini
     specified_voice_names_elevenlabs = [name.strip() for name in config.get('Voice', 'specified_voices_elevenlabs').split(",")]
 
-    # Add specified voices for ElevenLabs
+    # Remove any specified voices that are not in the all_voices list (i.e, invalid voice names)
     specified_voices_elevenlabs = add_specified_voices([], specified_voice_names_elevenlabs, all_voices_elevenlabs)
 
     # Fetch remaining voices that have not been specified for ElevenLabs
@@ -416,7 +416,7 @@ if use_playht:
     # Specify any voices that you know you want to use for Play.ht. USE LOWER CASE. This is pulled from settings.ini
     specified_voice_names_playht = [name.strip() for name in config.get('Voice', 'specified_voices_playht').split(",")]
 
-    # Add specified voices for Play.ht
+    # Remove any specified voices that are not in the all_voices list (i.e, invalid voice names
     specified_voices_playht = add_specified_voices([], specified_voice_names_playht, all_voices_playht)
 
     # Fetch remaining voices that have not been specified for Play.ht
