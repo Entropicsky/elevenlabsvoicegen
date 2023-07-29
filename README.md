@@ -1,4 +1,4 @@
-# AI Voice Acting Generator (currently uses ElevenLabs and PlayHT)
+# AI Voice Acting Generator
 
 This project generates voice lines for video games using AI voice actors from multiple APIs. It was created to allow game developers to quickly generate high quality voice samples to prototype dialog in their games.
 
@@ -38,11 +38,9 @@ The program will:
 - Create configured number of variants by varying voice parameters
 - Save audio files to the output folder
 
-## Settings
+## Settings and Installation
 
 The `settings.ini` file contains all the configuration options for the program.
-
-### [System]
 
 ```ini
 
