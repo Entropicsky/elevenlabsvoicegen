@@ -31,6 +31,9 @@ config.read('settings.ini')
 # use a casting note to help select voices to use
 casting_note = config.get('Voice', 'casting_note')
 
+# use a casting note to help select voices to use
+listvoicesonly = config.get('Voice', 'listvoicesonly')
+
 #Use or don't use the APIs based on Settings    
 use_elevenlabs = config.getboolean('Voice', 'use_elevenlabs')
 use_playht = config.getboolean('Voice', 'use_playht')
@@ -235,7 +238,7 @@ def pick_best_voices_playht(voices, casting_note, num_suggestions):
     # prepare the message
     user_message = {
         "role": "user",
-        "content": f"We need a {casting_note}. Please rank the following voice options: {voices_string}. Return the top {num_suggestions} choice(s) for the best actors to handle the role in a numbered list."
+        "content": f"We need a {casting_note}. Please rank the following voice options: {voices_string}. Return the top {num_suggestions} choice(s) for the best actors to handle the role in a numbered list. Include the actors gender and accent in the list."
     }
     system_message = {
         "role": "system",
@@ -408,7 +411,9 @@ if use_elevenlabs:
         print(f"{i+1}. Name: {voice['name']}, Gender: {voice['labels'].get('gender', 'N/A')}, Accent: {voice['labels'].get('accent', 'N/A')}, Voice ID: {voice['voice_id']}, Preview URL: {voice['preview_url']}, Description: {voice['labels'].get('description', 'N/A')}, Use Case: {voice['labels'].get('use case', 'N/A')}")
 
     # Generate voices for ElevenLabs
-    generate_voices_for_elevenlabs(final_voices_elevenlabs, lines, settings_combinations, dir_name)
+    if not listvoicesonly:
+        generate_voices_for_elevenlabs(final_voices_elevenlabs, lines, settings_combinations, dir_name)
+
 
 if use_playht:
     # Fetch voices from Play.ht API
@@ -437,4 +442,5 @@ if use_playht:
         print(f"{i+1}. Name: {voice['name']}, Gender: {voice['gender']}, Language: {voice['language']}")
 
     # Generate voice lines for the selected Play.ht voices
-    generate_voices_for_playht(final_voices_playht, lines, dir_name, 10)
+    if not listvoicesonly:
+        generate_voices_for_playht(final_voices_playht, lines, dir_name, 10)
