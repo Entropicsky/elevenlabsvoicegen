@@ -309,17 +309,31 @@ def generate_voices_for_elevenlabs(final_voices, lines, settings_combinations, d
     for voice_info in final_voices:
         voice_name = voice_info['name']
         voice_id = voice_info['voice_id']
+
+        variant_number = 0  # Initialize variant number for this voice
+        variant_letters = {}  # Initialize the dictionary to track variant letters for this voice
+        settings_seen = set()  # Initialize the set to track unique combinations of stability and similarity for this voice
+
         for line in lines:
             line_id, line_text = line
             for settings in settings_combinations:
                 stability, similarity_boost, variant = settings
-                filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant}_stability_{stability}_similarity_{similarity_boost}.wav"
+                # Create a unique key for each combination of stability and similarity_boost
+                settings_key = f"{stability}_{similarity_boost}"
+                # If this combination of settings has not been seen before for this voice, increment variant number
+                if settings_key not in settings_seen:
+                    variant_number += 1
+                    variant_letters[settings_key] = 'a'  # Initialize variant letter to 'a'
+                    settings_seen.add(settings_key)  # Add this combination to the set of seen combinations
+                # Get the current variant letter for this combination of settings
+                variant_letter = variant_letters[settings_key]
+                filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant_number}{variant_letter}_stability_{stability}_similarity_{similarity_boost}.wav"
                 # Check if file exists
                 if os.path.exists(filename):
                     print(f"File {filename} already exists, skipping...")
                     continue
                 try:
-                    print(f"Generating line: {voice_name}_{line_text} with stability: {stability}, similarity boost: {similarity_boost} and variant: {variant}")  # Log the line being processed
+                    print(f"Generating line: {voice_name}_{line_text} with stability: {stability}, similarity boost: {similarity_boost} and variant: {variant_number}{variant_letter}")  # Log the line being processed
                     # Generate the audio
                     audio = generate_audio_elevenlabs(text=line_text, voice_id=voice_id, stability=stability, similarity_boost=similarity_boost)
                     # Save the audio file
@@ -327,8 +341,14 @@ def generate_voices_for_elevenlabs(final_voices, lines, settings_combinations, d
                         f.write(audio)
                 except Exception as e:
                     print(f"Failed to generate audio for line: {line_text}. Error: {str(e)}")
+                # Increment the variant letter for this combination of settings
+                next_variant_letter = chr(ord(variant_letter) + 1)
+                variant_letters[settings_key] = next_variant_letter
+
+
 
 def generate_voices_for_playht(final_voices, lines, dir_name, max_attempts=10):
+
     # Generate voice lines for the selected voices
     for voice_info in final_voices:
         voice_name = voice_info["name"]
