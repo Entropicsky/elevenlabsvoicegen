@@ -217,8 +217,8 @@ def pick_best_voices_elevenlabs(voices, casting_note, num_suggestions):
     print(response_message)
 
     # Get the ordered list of voice names from the model's output
-    voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)\s\(", response_message)]  # updated regular expression
-
+    # In this modified regular expression, (\s*[-:\(]|$) matches either a space followed by a dash, colon, or opening parenthesis, or the end of the string. This should allow the script to correctly extract the names whether they are followed by a space and a dash, a colon and a space, a space and an opening parenthesis, or nothing at all. 
+    voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)(\s*[-:\(]|$)", response_message)]
     # filter original voices list to get top voices with all information
     top_voices = [voice for voice in voices if voice['name'].lower() in voice_names_in_response][:num_suggestions]
 
@@ -254,8 +254,9 @@ def pick_best_voices_playht(voices, casting_note, num_suggestions):
 
     print(response_message)
 
-    # Get the ordered list of voice names from the model's output
-    voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)\s\(", response_message)]  # updated regular expression
+    # Get the ordered list of voice names from the model's output. Handle various ways that ChatGPT may format the list of voice names.
+    voice_names_in_response = [match.group(1).lower() for match in re.finditer(r"\d+\. ([\w\s]+?)(\s*[-:\(]|$)", response_message)]
+
 
     # filter original voices list to get top voices with all information, preserving the order of ranking
     top_voices = [next(voice for voice in voices if voice['name'].lower() == name) for name in voice_names_in_response][:num_suggestions]
