@@ -32,7 +32,7 @@ config.read('settings.ini')
 casting_note = config.get('Voice', 'casting_note')
 
 # use a casting note to help select voices to use
-listvoicesonly = config.get('Voice', 'listvoicesonly')
+listvoicesonly = config.getboolean('Voice', 'listvoicesonly')
 
 #Use or don't use the APIs based on Settings    
 use_elevenlabs = config.getboolean('Voice', 'use_elevenlabs')
@@ -42,9 +42,14 @@ use_playht = config.getboolean('Voice', 'use_playht')
 stability_range = [float(value.strip()) for value in config.get('Settings', 'stability_range').split(",")]
 similarity_boost_range = [float(value.strip()) for value in config.get('Settings', 'similarity_boost_range').split(",")]
 
-settings_combinations = list(itertools.product(stability_range, similarity_boost_range))
 
 VARIANTS = config.getint('Settings', 'variants')  # Number of variants per actor per line
+
+VARIANTS = range(1, VARIANTS + 1)
+settings_combinations = list(itertools.product(stability_range, similarity_boost_range, VARIANTS))
+#settings_combinations = list(itertools.product(stability_range, similarity_boost_range))
+
+
 elevenlabs_actors = config.getint('Settings', 'elevenlabs_actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
 playht_actors = config.getint('Settings', 'playht_actors')  # Number of actors to cast from ChatGPT's suggestions in addition to the specified_voice_names
 
@@ -200,7 +205,8 @@ def pick_best_voices_elevenlabs(voices, casting_note, num_suggestions):
     # prepare the message
     user_message = {
         "role": "user",
-        "content": f"We need a {casting_note}. Please rank the following voice options: {voices_string}. Return the top {num_suggestions} choice(s) for the best actors to handle the role in a numbered list."
+        "content": f"We need a {casting_note}. Please rank the following voice options: {voices_string}. Return the top {num_suggestions} choice(s) for the best actors to handle the role in a numbered list. Include the actors gender and accent in the list."
+        
     }
     system_message = {
         "role": "system",
@@ -305,14 +311,15 @@ def generate_voices_for_elevenlabs(final_voices, lines, settings_combinations, d
         voice_id = voice_info['voice_id']
         for line in lines:
             line_id, line_text = line
-            for variant, (stability, similarity_boost) in enumerate(settings_combinations):
-                filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant+1}_stability_{stability}_similarity_{similarity_boost}.wav"
+            for settings in settings_combinations:
+                stability, similarity_boost, variant = settings
+                filename = f"{dir_name}/{voice_name}_{line_id}_variant_{variant}_stability_{stability}_similarity_{similarity_boost}.wav"
                 # Check if file exists
                 if os.path.exists(filename):
                     print(f"File {filename} already exists, skipping...")
                     continue
                 try:
-                    print(f"Generating line: {voice_name}_{line_text} with stability: {stability} and similarity boost: {similarity_boost}")  # Log the line being processed
+                    print(f"Generating line: {voice_name}_{line_text} with stability: {stability}, similarity boost: {similarity_boost} and variant: {variant}")  # Log the line being processed
                     # Generate the audio
                     audio = generate_audio_elevenlabs(text=line_text, voice_id=voice_id, stability=stability, similarity_boost=similarity_boost)
                     # Save the audio file
@@ -411,7 +418,9 @@ if use_elevenlabs:
         print(f"{i+1}. Name: {voice['name']}, Gender: {voice['labels'].get('gender', 'N/A')}, Accent: {voice['labels'].get('accent', 'N/A')}, Voice ID: {voice['voice_id']}, Preview URL: {voice['preview_url']}, Description: {voice['labels'].get('description', 'N/A')}, Use Case: {voice['labels'].get('use case', 'N/A')}")
 
     # Generate voices for ElevenLabs
+    print(listvoicesonly)
     if not listvoicesonly:
+        print("i'm trying for elevenlabs")
         generate_voices_for_elevenlabs(final_voices_elevenlabs, lines, settings_combinations, dir_name)
 
 
