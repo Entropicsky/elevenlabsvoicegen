@@ -5,7 +5,7 @@ json==2.0.9
 time==1.2.2
 re==2.2.1
 os==0.1.4
-dotenv==0.19.1
+python-dotenv==0.19.1
 datetime==4.3
 csv==1.0
 itertools==8.10.0
